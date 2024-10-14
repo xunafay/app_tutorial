@@ -10,35 +10,33 @@ class Tutorial {
   static List<OverlayEntry> entries = [];
   static late int count;
 
+  // Create a Completer to indicate when the tutorial is complete
+  static late Completer<void> _tutorialCompleter;
+  static late OverlayState _overlayState;
+
   static Future<void> showTutorial(
       BuildContext context, List<TutorialItem> children,
       {required VoidCallback onTutorialComplete}) async {
     clearEntries();
     final size = MediaQuery.of(context).size;
-    OverlayState overlayState = Overlay.of(context);
+    _overlayState = Overlay.of(context);
 
+    _tutorialCompleter = Completer<void>();
     count = 0;
 
-    // Create a Completer to indicate when the tutorial is complete
-    Completer<void> tutorialCompleter = Completer<void>();
-
     children.forEach((element) async {
+      await Scrollable.ensureVisible(
+        element.globalKey.currentContext!,
+        duration: Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
       final offset = _capturePositionWidget(element.globalKey);
       final sizeWidget = _getSizeWidget(element.globalKey);
       entries.add(
         OverlayEntry(
           builder: (context) {
             return GestureDetector(
-              onTap: () {
-                entries[count].remove();
-                count++;
-                if (count < entries.length) {
-                  overlayState.insert(entries[count]);
-                } else {
-                  // If this is the last tutorial step, complete the tutorial
-                  tutorialCompleter.complete();
-                }
-              },
+              onTap: next,
               child: Scaffold(
                 backgroundColor: Colors.transparent,
                 body: Stack(
@@ -66,13 +64,24 @@ class Tutorial {
       );
     });
 
-    overlayState.insert(entries[0]);
+    _overlayState.insert(entries[0]);
 
     // Wait until the tutorialCompleter.future is completed to indicate the tutorial is finished
-    await tutorialCompleter.future;
+    await _tutorialCompleter.future;
 
     // If the onTutorialComplete function is provided, call it
     onTutorialComplete();
+  }
+
+  static void next() {
+    entries[count].remove();
+    count++;
+    if (count < entries.length) {
+      _overlayState.insert(entries[count]);
+    } else {
+      // If this is the last tutorial step, complete the tutorial
+      _tutorialCompleter.complete();
+    }
   }
 
   static clearEntries() {
