@@ -7,103 +7,100 @@ import 'package:app_tutorial/src/models/tutorial_item.dart';
 import 'package:app_tutorial/src/painter/painter.dart';
 
 class Tutorial {
-  static List<OverlayEntry> entries = [];
   static late int count;
-
-  // Create a Completer to indicate when the tutorial is complete
   static late Completer<void> _tutorialCompleter;
+  static late List<TutorialItem> children;
+  static late VoidCallback onTutorialComplete;
   static late OverlayState _overlayState;
+  static OverlayEntry? _overlayEntry;
 
   static Future<void> showTutorial(
-      BuildContext context, List<TutorialItem> children,
-      {required VoidCallback onTutorialComplete}) async {
-    clearEntries();
-    final size = MediaQuery.of(context).size;
+    BuildContext context,
+    List<TutorialItem> children, {
+    required VoidCallback onTutorialComplete,
+  }) async {
+    Tutorial.children = children;
+    Tutorial.onTutorialComplete = onTutorialComplete;
+    Tutorial.count = -1;
+    _tutorialCompleter = Completer<void>();
     _overlayState = Overlay.of(context);
 
-    _tutorialCompleter = Completer<void>();
-    count = 0;
+    await next(context);
 
-    children.forEach((element) async {
-      await Scrollable.ensureVisible(
-        element.globalKey.currentContext!,
-        duration: Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
-      final offset = _capturePositionWidget(element.globalKey);
-      final sizeWidget = _getSizeWidget(element.globalKey);
-      entries.add(
-        OverlayEntry(
-          builder: (context) {
-            return GestureDetector(
-              onTap: next,
-              child: Scaffold(
-                backgroundColor: Colors.transparent,
-                body: Stack(
-                  children: [
-                    CustomPaint(
-                      size: size,
-                      painter: HolePainter(
-                        shapeFocus: element.shapeFocus,
-                        dx: offset.dx + (sizeWidget.width / 2),
-                        dy: offset.dy + (sizeWidget.height / 2),
-                        width: sizeWidget.width,
-                        height: sizeWidget.height,
-                        color: element.color,
-                        borderRadius: element.borderRadius,
-                        radius: element.radius,
-                      ),
-                    ),
-                    element.child,
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      );
-    });
-
-    _overlayState.insert(entries[0]);
-
-    // Wait until the tutorialCompleter.future is completed to indicate the tutorial is finished
     await _tutorialCompleter.future;
-
-    // If the onTutorialComplete function is provided, call it
-    onTutorialComplete();
   }
 
-  static void next() {
-    entries[count].remove();
+  static Future<void> next(
+    BuildContext context,
+  ) async {
     count++;
-    if (count < entries.length) {
-      _overlayState.insert(entries[count]);
+    if (count < children.length) {
+      final size = MediaQuery.of(context).size;
+      if (_overlayEntry != null) {
+        _overlayEntry!.remove();
+      }
+
+      await Scrollable.ensureVisible(
+        children[count].globalKey.currentContext!,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+      final offset = _capturePositionWidget(children[count].globalKey);
+      final sizeWidget = _getSizeWidget(children[count].globalKey);
+      _overlayEntry = OverlayEntry(
+        builder: (context) {
+          return GestureDetector(
+            onTap: () {
+              next(context);
+            },
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Stack(
+                children: [
+                  CustomPaint(
+                    size: size,
+                    painter: HolePainter(
+                      shapeFocus: children[count].shapeFocus,
+                      dx: offset.dx + (sizeWidget.width / 2),
+                      dy: offset.dy + (sizeWidget.height / 2),
+                      width: sizeWidget.width,
+                      height: sizeWidget.height,
+                      color: children[count].color,
+                      borderRadius: children[count].borderRadius,
+                      radius: children[count].radius,
+                    ),
+                  ),
+                  children[count].child,
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      _overlayState.insert(_overlayEntry!);
     } else {
-      // If this is the last tutorial step, complete the tutorial
+      _overlayEntry!.remove();
       _tutorialCompleter.complete();
+      onTutorialComplete();
     }
   }
 
-  static clearEntries() {
-    entries.clear();
-  }
-
-  static skipAll(BuildContext context) {
-    entries[count].remove();
-    count++;
+  static void skipAll(BuildContext context) {
+    _overlayEntry!.remove();
+    _tutorialCompleter.complete();
+    onTutorialComplete();
   }
 
   /// This method returns the position of the widget
   static Offset _capturePositionWidget(GlobalKey key) {
-    RenderBox renderPosition =
-        key.currentContext?.findRenderObject() as RenderBox;
+    final renderPosition = key.currentContext!.findRenderObject()! as RenderBox;
 
     return renderPosition.localToGlobal(Offset.zero);
   }
 
   /// This method returns the size of the widget
   static Size _getSizeWidget(GlobalKey key) {
-    RenderBox renderSize = key.currentContext?.findRenderObject() as RenderBox;
+    final renderSize = key.currentContext!.findRenderObject()! as RenderBox;
     return renderSize.size;
   }
 }
